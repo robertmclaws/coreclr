@@ -10,8 +10,7 @@ namespace System.Collections.ObjectModel
     using System.Collections;
     using System.Collections.Generic;
     using System.Diagnostics;
-    using System.Runtime;
-    
+
     [Serializable]
     [System.Runtime.InteropServices.ComVisible(false)]
     [DebuggerTypeProxy(typeof(Mscorlib_CollectionDebugView<>))]
@@ -44,32 +43,31 @@ namespace System.Collections.ObjectModel
         public T this[int index] {
             get { return items[index]; }
             set {
-                if( items.IsReadOnly) {
-                    ThrowHelper.ThrowNotSupportedException(ExceptionResource.NotSupported_ReadOnlyCollection);
-                }
-                
-                if (index < 0 || index >= items.Count) {
-                    ThrowHelper.ThrowArgumentOutOfRange_IndexException();
-                }
+                CheckReadOnly();
+                CheckIndex(index);
 
                 SetItem(index, value);
             }
         }
 
         public void Add(T item) {
-            if( items.IsReadOnly) {
-                ThrowHelper.ThrowNotSupportedException(ExceptionResource.NotSupported_ReadOnlyCollection);
-            }
+            CheckReadOnly();
+            //ThrowHelper.IfNullAndNullsAreIllegalThenThrow<T>(item, ExceptionArgument.item);
             
             int index = items.Count;
             InsertItem(index, item);
         }
 
+        public void AddRange(IEnumerable<T> collection) {
+            CheckReadOnly();
+            //ThrowHelper.IfNullAndNullsAreIllegalThenThrow<T>(collection, ExceptionArgument.collection);
+
+            AddItemRange(collection);
+        }
+
         public void Clear() {
-            if( items.IsReadOnly) {
-                ThrowHelper.ThrowNotSupportedException(ExceptionResource.NotSupported_ReadOnlyCollection);
-            }
-            
+            CheckReadOnly();
+
             ClearItems();
         }
 
@@ -90,38 +88,60 @@ namespace System.Collections.ObjectModel
         }
 
         public void Insert(int index, T item) {
-            if (items.IsReadOnly) {
-                ThrowHelper.ThrowNotSupportedException(ExceptionResource.NotSupported_ReadOnlyCollection);
-            }
-
-            if (index < 0 || index > items.Count) {
-                ThrowHelper.ThrowArgumentOutOfRangeException(ExceptionArgument.index, ExceptionResource.ArgumentOutOfRange_ListInsert);
-            }
+            CheckReadOnly();
+            CheckIndex(index, ExceptionResource.ArgumentOutOfRange_ListInsert);
 
             InsertItem(index, item);
         }
 
+        public void InsertRange(int index, IEnumerable<T> collection) {
+            CheckReadOnly();
+
+            InsertItemRange(index, collection);
+        }
+
         public bool Remove(T item) {
-            if( items.IsReadOnly) {
-                ThrowHelper.ThrowNotSupportedException(ExceptionResource.NotSupported_ReadOnlyCollection);
-            }
-            
+            CheckReadOnly();
+
             int index = items.IndexOf(item);
             if (index < 0) return false;
             RemoveItem(index);
             return true;
         }
 
-        public void RemoveAt(int index) {
-            if( items.IsReadOnly) {
-                ThrowHelper.ThrowNotSupportedException(ExceptionResource.NotSupported_ReadOnlyCollection);
-            }
+        public void RemoveAll(Predicate<T> range) {
+            CheckReadOnly();
 
-            if (index < 0 || index >= items.Count) {
-                ThrowHelper.ThrowArgumentOutOfRange_IndexException();
-            }
+            RemoveItemsRange(range);
+        }
+
+        public void RemoveAt(int index) {
+            CheckReadOnly();
+            CheckIndex(index);
 
             RemoveItem(index);
+        }
+
+        public void RemoveRange(int index, int count)
+        {
+            CheckReadOnly();
+            CheckIndex(index);
+
+            RemoveItemsRange(index, count);
+        }
+
+        public void ReplaceRange(int index, int count, IEnumerable<T> collection)
+        {
+            CheckReadOnly();
+            CheckIndex(index);
+
+            RemoveItemsRange(index, count);
+            InsertItemRange(index, collection);
+        }
+
+        protected virtual void AddItemRange(IEnumerable<T> items) {
+            List<T> list = (List<T>)Items;
+            list.AddRange(items);
         }
 
         protected virtual void ClearItems() {
@@ -131,9 +151,26 @@ namespace System.Collections.ObjectModel
         protected virtual void InsertItem(int index, T item) {
             items.Insert(index, item);
         }
-        
+
+        protected virtual void InsertItemRange(int startingIndex, IEnumerable<T> items) {
+            List<T> list = (List<T>)Items;
+            list.InsertRange(startingIndex, items);
+        }
+
         protected virtual void RemoveItem(int index) {
             items.RemoveAt(index);
+        }
+
+        protected virtual void RemoveItemsRange(int index, int count) {
+            List<T> list = (List<T>)Items;
+            list.RemoveRange(index, count);
+        }
+
+        protected virtual void RemoveItemsRange(Predicate<T> match) {
+            List<T> list = (List<T>)Items;
+            foreach (var item in list.FindAll(match)) {
+                list.Remove(item);
+            }
         }
 
         protected virtual void SetItem(int index, T item) {
@@ -265,9 +302,7 @@ namespace System.Collections.ObjectModel
         }
 
         int IList.Add(object value) {
-            if( items.IsReadOnly) {
-                ThrowHelper.ThrowNotSupportedException(ExceptionResource.NotSupported_ReadOnlyCollection);
-            }
+            CheckReadOnly();
             ThrowHelper.IfNullAndNullsAreIllegalThenThrow<T>(value, ExceptionArgument.value);
             
             try { 
@@ -295,9 +330,7 @@ namespace System.Collections.ObjectModel
         }
 
         void IList.Insert(int index, object value) {
-            if( items.IsReadOnly) {
-                ThrowHelper.ThrowNotSupportedException(ExceptionResource.NotSupported_ReadOnlyCollection);
-            }
+            CheckReadOnly();
             ThrowHelper.IfNullAndNullsAreIllegalThenThrow<T>(value, ExceptionArgument.value);
             
             try { 
@@ -317,6 +350,23 @@ namespace System.Collections.ObjectModel
             if(IsCompatibleObject(value)) {
                 Remove((T) value);
             }             
+        }
+
+        private void CheckIndex(int index){
+            if (index < 0 || index >= items.Count) {
+                ThrowHelper.ThrowArgumentOutOfRange_IndexException();
+            }
+        }
+
+        private void CheckIndex(int index, ExceptionResource resource) {
+            if (index < 0 || index > items.Count) {
+            }
+        }
+
+        private void CheckReadOnly() {
+            if (items.IsReadOnly) {
+                ThrowHelper.ThrowNotSupportedException(ExceptionResource.NotSupported_ReadOnlyCollection);
+            }
         }
 
         private static bool IsCompatibleObject(object value) {
