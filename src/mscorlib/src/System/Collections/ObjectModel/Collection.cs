@@ -52,7 +52,6 @@ namespace System.Collections.ObjectModel
 
         public void Add(T item) {
             CheckReadOnly();
-            //ThrowHelper.IfNullAndNullsAreIllegalThenThrow<T>(item, ExceptionArgument.item);
             
             int index = items.Count;
             InsertItem(index, item);
@@ -60,9 +59,9 @@ namespace System.Collections.ObjectModel
 
         public void AddRange(IEnumerable<T> collection) {
             CheckReadOnly();
-            //ThrowHelper.IfNullAndNullsAreIllegalThenThrow<T>(collection, ExceptionArgument.collection);
+            CheckNull(collection, ExceptionArgument.collection);
 
-            AddItemRange(collection);
+            InsertItemRange(items.Count, collection);
         }
 
         public void Clear() {
@@ -96,6 +95,8 @@ namespace System.Collections.ObjectModel
 
         public void InsertRange(int index, IEnumerable<T> collection) {
             CheckReadOnly();
+            CheckIndex(index, ExceptionResource.ArgumentOutOfRange_ListInsert);
+            CheckNull(collection, ExceptionArgument.collection);
 
             InsertItemRange(index, collection);
         }
@@ -109,11 +110,12 @@ namespace System.Collections.ObjectModel
             return true;
         }
 
-        public void RemoveAll(Predicate<T> range) {
-            CheckReadOnly();
+        //public void RemoveAll(Predicate<T> match) {
+        //    CheckReadOnly();
+        //    CheckNull(match, ExceptionArgument.match);
 
-            RemoveItemsRange(range);
-        }
+        //    RemoveItemRange(match);
+        //}
 
         public void RemoveAt(int index) {
             CheckReadOnly();
@@ -126,22 +128,19 @@ namespace System.Collections.ObjectModel
         {
             CheckReadOnly();
             CheckIndex(index);
+            CheckCount(count, index);
 
-            RemoveItemsRange(index, count);
+            RemoveItemRange(index, count);
         }
 
         public void ReplaceRange(int index, int count, IEnumerable<T> collection)
         {
             CheckReadOnly();
             CheckIndex(index);
+            CheckCount(count, index);
 
-            RemoveItemsRange(index, count);
+            RemoveItemRange(index, count);
             InsertItemRange(index, collection);
-        }
-
-        protected virtual void AddItemRange(IEnumerable<T> items) {
-            List<T> list = (List<T>)Items;
-            list.AddRange(items);
         }
 
         protected virtual void ClearItems() {
@@ -152,26 +151,53 @@ namespace System.Collections.ObjectModel
             items.Insert(index, item);
         }
 
-        protected virtual void InsertItemRange(int startingIndex, IEnumerable<T> items) {
-            List<T> list = (List<T>)Items;
-            list.InsertRange(startingIndex, items);
+        protected virtual void InsertItemRange(int index, IEnumerable<T> collection) {
+            List<T> list = Items as List<T>;
+            if (list != null) {
+                // If items is List<T>, use List<T>'s optimized InsertRange.
+                list.InsertRange(index, collection);
+            }
+            else {
+                // Otherwise, fallback to inserting each item individually.
+                foreach (T item in collection) {
+                    items.Insert(index++, item);
+                }
+            }
         }
 
         protected virtual void RemoveItem(int index) {
             items.RemoveAt(index);
         }
 
-        protected virtual void RemoveItemsRange(int index, int count) {
-            List<T> list = (List<T>)Items;
-            list.RemoveRange(index, count);
-        }
-
-        protected virtual void RemoveItemsRange(Predicate<T> match) {
-            List<T> list = (List<T>)Items;
-            foreach (var item in list.FindAll(match)) {
-                list.Remove(item);
+        protected virtual void RemoveItemRange(int index, int count) {
+            List<T> list = Items as List<T>;
+            if (list != null) {
+                // If items is List<T>, use List<T>'s optimized RemoveRange.
+                list.RemoveRange(index, count);
+            }
+            else {
+                // Otherwise, fallback to removing each item individually.
+                for (int i = index; i <= count - 1; i++) {
+                    items.RemoveAt(index);
+                }
             }
         }
+
+        //// NOTE: Removed for now per https://github.com/dotnet/corefx/issues/10752#issuecomment-252998145, but
+        //// leaving implementation for future discussion.
+        //protected virtual void RemoveItemRange(Predicate<T> match) {
+        //    List<T> list = Items as List<T>;
+        //    if (list != null) {
+        //        // If items is List<T>, use List<T>'s optimized RemoveAll.
+        //        list.RemoveAll(match);
+        //    }
+        //    else {
+        //        // Otherwise, fallback to removing each item individually.
+        //        foreach (var item in list.FindAll(match)) {
+        //            list.Remove(item);
+        //        }
+        //    }
+        //}
 
         protected virtual void SetItem(int index, T item) {
             items[index] = item;
@@ -343,13 +369,20 @@ namespace System.Collections.ObjectModel
         }
 
         void IList.Remove(object value) {
-            if( items.IsReadOnly) {
-                ThrowHelper.ThrowNotSupportedException(ExceptionResource.NotSupported_ReadOnlyCollection);
-            }
+            CheckReadOnly();
 
             if(IsCompatibleObject(value)) {
                 Remove((T) value);
             }             
+        }
+
+        private void CheckCount(int count, int index) {
+            if (count < 0) {
+                ThrowHelper.ThrowIndexArgumentOutOfRange_NeedNonNegNumException();
+            }
+            if (index + count > items.Count) {
+                ThrowHelper.ThrowArgumentOutOfRangeException(ExceptionArgument.count);
+            }
         }
 
         private void CheckIndex(int index){
@@ -361,6 +394,12 @@ namespace System.Collections.ObjectModel
         private void CheckIndex(int index, ExceptionResource resource) {
             if (index < 0 || index > items.Count) {
                 ThrowHelper.ThrowArgumentOutOfRangeException(ExceptionArgument.index, resource);
+            }
+        }
+
+        private void CheckNull(object thingToCheck, ExceptionArgument argument) {
+            if (thingToCheck == null) {
+                ThrowHelper.ThrowArgumentNullException(argument);
             }
         }
 
