@@ -360,6 +360,7 @@ namespace System.Collections.ObjectModel
 
         private void CheckIndex(int index, ExceptionResource resource) {
             if (index < 0 || index > items.Count) {
+                ThrowHelper.ThrowArgumentOutOfRangeException(ExceptionArgument.index, resource);
             }
         }
 
